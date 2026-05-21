@@ -6,6 +6,10 @@ let isMining = false
 
 app.use(express.json()) // permette di leggere il body delle richieste POST
 app.use(express.static('public')) // serve i file statici della cartella public
+app.use((req, res, next) => {   // ← qui
+    console.log(`${new Date().toISOString()} ${req.method} ${req.path}`)
+    next()
+})
 
 app.get('/chain', (req, res) => { //endpoint che restituisce la chain
     let chain = leggiChain()
@@ -81,10 +85,7 @@ app.get('/reset', (req, res) => {
     salvaChain({ blocchi: [], mempool: [] })
     res.json({ ok: true })
 })
-app.use((req, res, next) => {
-    console.log(`${new Date().toISOString()} ${req.method} ${req.path}`)
-    next()
-})
+
 
 app.get('/start', (req, res) => {
     bloccato = false
