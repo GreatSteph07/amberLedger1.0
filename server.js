@@ -74,13 +74,26 @@ app.get('/sfoglia', (req, res) => {
     res.sendFile(__dirname + '/public/sfoglia.html')
 })
 
+let bloccato = false
+
 app.get('/reset', (req, res) => {
+    bloccato = true
     salvaChain({ blocchi: [], mempool: [] })
     res.json({ ok: true })
 })
+app.use((req, res, next) => {
+    console.log(`${new Date().toISOString()} ${req.method} ${req.path}`)
+    next()
+})
 
-async function avviaMining(){
+app.get('/start', (req, res) => {
+    bloccato = false
+    avviaMining()
+    res.json({ ok: true })
+})
 
+async function avviaMining() {
+    if (bloccato) return
     const chain = leggiChain()
     let mempool = chain.mempool        // array delle promesse in attesa
     let blocchi = chain.blocchi        // array dei blocchi
