@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>AmberLedger</title>
+    <style>
+        body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 0 20px; }
+        input { width: 100%; padding: 8px; margin-bottom: 10px; box-sizing: border-box; }
+        .promessa { margin: 4px 0; padding-left: 10px; border-left: 3px solid #999; }
+        button { padding: 8px 16px; cursor: pointer; }
+        #messaggio { margin-top: 10px; color: green; }
+        nav { margin-bottom: 30px; }
+        nav a { margin-right: 15px; }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="/">Scrivi una promessa</a>
+        <a href="/sfoglia">Sfoglia la chain</a>
+    </nav>
+
+    <h2>Fai una promessa</h2>
+    <input type="text" id="inputPromessa" placeholder="inserisci la promessa">
+    <button onclick="salvaPromessa()">Cristallizza nell'ambra</button>
+    <div id="messaggio"></div>
+
+    <div id="bloccoAperto" style="display:none; margin-top:20px; border:1px solid #ccc; padding:15px; border-radius:4px;">
+        <div style="font-weight:bold; margin-bottom:8px;">in attesa di essere minate</div>
+        <div id="listaMempool"></div>
+    </div>
+
+    <script>
+        function aggiungiPromessaMempool(testo) {
+            const lista = document.getElementById('listaMempool');
+            const div = document.createElement('div');
+            div.className = 'promessa';
+            div.textContent = testo;
+            lista.appendChild(div);
+            document.getElementById('bloccoAperto').style.display = 'block';
+        }
+
+        async function salvaPromessa() {
+            const input = document.getElementById('inputPromessa');
+            const testo = input.value.trim();
+            if (!testo) return;
+            if (!confirm('sei sicuro? una promessa fatta non potrà essere rimossa o modificata')) return;
+
+            const risposta = await fetch('/promessa', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ testo })
+            });
+            const dati = await risposta.json();
+
+            if (!dati.errore) {
+                aggiungiPromessaMempool(testo);
+                input.value = '';
+                document.getElementById('messaggio').textContent = 'promessa cristallizzata ✓';
+                setTimeout(() => document.getElementById('messaggio').textContent = '', 3000);
+            } else {
+                document.getElementById('messaggio').style.color = 'red';
+                document.getElementById('messaggio').textContent = dati.errore;
+            }
+        }
+
+        async function caricaMempool() {
+            const risposta = await fetch('/chain');
+            const dati = await risposta.json();
+            if (dati.mempool && dati.mempool.length > 0) {
+                dati.mempool.forEach(p => aggiungiPromessaMempool(p));
+            }
+        }
+
+        caricaMempool();
+    </script>
+</body>
+</html>

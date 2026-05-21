@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>AmberLedger - Sfoglia</title>
+    <style>
+        body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 0 20px; }
+        nav { margin-bottom: 30px; }
+        nav a { margin-right: 15px; }
+        .blocco { border: 1px solid #ccc; padding: 15px; margin-bottom: 15px; border-radius: 4px; }
+        .blocco .data { font-weight: bold; margin-bottom: 8px; color: #333; }
+        .blocco .promessa { margin: 4px 0; padding-left: 10px; border-left: 3px solid #999; }
+        .blocco .meta { font-size: 0.75em; color: #aaa; margin-top: 10px; word-break: break-all; }
+        #statoIntegrita { padding: 10px 15px; margin-bottom: 20px; border-radius: 4px; font-size: 0.9em; display: none; }
+        #statoIntegrita.integra { background: #e6f4ea; border: 1px solid #a8d5b5; color: #2d6a4f; }
+        #statoIntegrita.manomessa { background: #fdecea; border: 1px solid #f5c6cb; color: #8b1a1a; font-weight: bold; }
+        #status { font-size: 0.85em; color: #666; margin-bottom: 20px; }
+        #controlli { margin-bottom: 20px; }
+        label { cursor: pointer; }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="/">Scrivi una promessa</a>
+        <a href="/sfoglia">Sfoglia la chain</a>
+    </nav>
+
+    <h2>La chain</h2>
+
+    <div id="status"></div>
+    <div id="statoIntegrita"></div>
+
+    <div id="controlli">
+        <label>
+            <input type="checkbox" id="toggleAnimazione" checked>
+            mostra animazione giorni vuoti
+        </label>
+    </div>
+
+    <div id="mempool"></div>
+    <div id="container"></div>
+
+    <script>
+        function formattaData(dataStr) {
+            const d = new Date(dataStr);
+            return d.toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' });
+        }
+
+        function giorniTra(dataA, dataB) {
+            const a = new Date(dataA);
+            const b = new Date(dataB);
+            return Math.round((b - a) / (1000 * 60 * 60 * 24));
+        }
+
+        function calcolaDelay(giorniVuoti) {
+            if (giorniVuoti <= 1) return 500;
+            if (giorniVuoti >= 100) return 3000;
+            return 500 + ((giorniVuoti - 1) / 99) * 2500;
+        }
+
+        async function mostraGiorniVuoti(numero, container) {
+            if (!document.getElementById('toggleAnimazione').checked) return;
+            const delay = calcolaDelay(numero);
+            const div = document.createElement('div');
+            div.style.cssText = 'text-align:center; color:#bbb; padding:10px; font-style:italic;';
+            div.textContent = numero === 1
+                ? '· · · 1 giorno senza promesse · · ·'
+                : `· · · ${numero} giorni senza promesse · · ·`;
+            container.appendChild(div);
+            await new Promise(r => setTimeout(r, delay));
+            container.removeChild(div);
+        }
+
+        function creaBloccoHTML(blocco) {
+            const div = document.createElement('div');
+            div.className = 'blocco';
+            div.innerHTML = `
+                <div class="data">${formattaData(blocco.data)} — blocco #${blocco.indice}</div>
+                ${blocco.promesse.map(p => `<div class="promessa">${p}</div>`).join('')}
+                <div class="meta">
+                    merkle root: ${blocco.merkleRoot}<br>
+                    hash: ${blocco.hash}<br>
+                    nonce: ${blocco.nonce}
+                </div>
+            `;
+            return div;
+        }
+
+        async function caricaChain() {
+            const risposta = await fetch('/chain');
+            const dati = await risposta.json();
+            const container = document.getElementById('container');
+
+            // mempool — promesse in attesa di essere minate
+            const divMempool = document.getElementById('mempool');
+            if (dati.mempool && dati.mempool.length > 0) {
+                divMempool.className = 'blocco';
+                divMempool.innerHTML = `
+                    <div class="data">in attesa di essere minate</div>
+                    ${dati.mempool.map(p => `<div class="promessa">${p}</div>`).join('')}
+                `;
+            }
+
+            // status mining
+            const statusRisposta = await fetch('/status');
+            const statusDati = await statusRisposta.json();
+            document.getElementById('status').textContent =
+                `blocchi: ${statusDati.altezza} · mempool: ${statusDati.mempool} · mining: ${statusDati.mining ? 'attivo' : 'in attesa'}`;
+
+            if (dati.blocchi.length === 0) return;
+
+            const blocchiOrdinati = [...dati.blocchi].reverse();
+            const oggi = new Date().toISOString();
+
+            for (let i = 0; i < blocchiOrdinati.length; i++) {
+                const blocco = blocchiOrdinati[i];
+                const bloccoSuccessivo = i === 0 ? { data: oggi } : blocchiOrdinati[i - 1];
+                const vuoti = giorniTra(blocco.data, bloccoSuccessivo.data) - 1;
+                if (vuoti > 0) {
+                    await mostraGiorniVuoti(vuoti, container);
+                }
+                container.appendChild(creaBloccoHTML(blocco));
+            }
+        }
+
+        async function verificaChain() {
+            const risposta = await fetch('/verifica');
+            const dati = await risposta.json();
+            const banner = document.getElementById('statoIntegrita');
+            banner.style.display = 'block';
+            if (dati.integra) {
+                banner.className = 'integra';
+                banner.textContent = '✓ chain integra — nessuna promessa è stata alterata';
+            } else {
+                banner.className = 'manomessa';
+                banner.textContent = '⚠ chain manomessa — una o più promesse sono state alterate';
+            }
+        }
+
+        caricaChain();
+        verificaChain();
+    </script>
+</body>
+</html>
