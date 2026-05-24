@@ -101,6 +101,10 @@ async function sincronizzazione(chainAttuale) {
 }
 
 async function propagaBlocco(blocco){
+    const headers= {
+        'Content-Type': 'application/json',
+        'X-Peer': 'true'
+    }
     for (const peer of PEERS) {
         try {
             let propagazione = await fetch(peer + "/blocco", {
@@ -115,6 +119,10 @@ async function propagaBlocco(blocco){
 }
 
 async function propagaPromessa(promessa){
+    const headers= {
+        'Content-Type': 'application/json',
+            'X-Peer': 'true'
+    }
     for (const peer of PEERS) {
         try {
             let propagazione = await fetch(peer + "/promessa", {

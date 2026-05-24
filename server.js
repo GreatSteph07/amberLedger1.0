@@ -36,7 +36,10 @@ app.post("/promessa", (req, res) => { //endpoint che riceve una promessa e la sa
         return res.status(400).json({ errore: 'promessa già nel mempool' })
     }
     mempool.push(promessa)
-    propagaPromessa(promessa) //manda la promessa agli altri peer
+    const daPeer = req.headers['x-peer'] === 'true'
+    if (!daPeer) {
+        propagaPromessa(promessa)
+    }
     salvaChain(chain)
     avviaMining()
     res.json({})
