@@ -48,6 +48,11 @@ app.get('/sfoglia', (req, res) => {
     res.sendFile(__dirname + '/public/sfoglia.html')
 })
 
+// serve la pagina delle proprie promesse
+app.get('/mie', (req, res) => {
+    res.sendFile(__dirname + '/public/mie.html')
+})
+
 // svuota la chain e blocca il mining
 app.get('/reset', (req, res) => {
     bloccato = true
