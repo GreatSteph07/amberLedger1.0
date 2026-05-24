@@ -3,6 +3,7 @@ const app = express()
 const { hash, calcolaMerkleRoot, validaBlocco, validaChain, validaChainParziale, leggiChain, salvaChain, PREFISSO, DIFFICOLTA, sincronizzazione, propagaBlocco, propagaPromessa } = require('./functions')
 
 let isMining = false
+let miningAttivo = false
 
 app.use(express.json()) // permette di leggere il body delle richieste POST
 app.use(express.static('public')) // serve i file statici della cartella public
@@ -146,7 +147,13 @@ async function avviaMining() {
         }
         nonce++
         if (nonce % 1000 === 0) {
-            await new Promise(r => setImmediate(r)) //ogni tanto permette al server di accettare le richieste arrivate nel frattempo
+            await new Promise(r => setImmediate(r))
+            // se la chain è cambiata nel frattempo, smetti
+            const chainAggiornata = leggiChain()
+            if (chainAggiornata.blocchi.length > blocchi.length) {
+                avviaMining()
+                return
+            }
         }
     }
 }
