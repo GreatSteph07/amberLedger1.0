@@ -117,7 +117,7 @@ async function propagaBlocco(blocco){
         }
     }
 }
-
+/*
 async function propagaPromessa(promessa){
     const headers= {
         'Content-Type': 'application/json',
@@ -135,8 +135,8 @@ async function propagaPromessa(promessa){
         }
     }
 }
+*/
 
 
 
-
-module.exports = { hash, calcolaMerkleRoot, merkleRoot, validaBlocco, validaChain, validaChainParziale, leggiChain, salvaChain, PREFISSO, DIFFICOLTA, sincronizzazione, propagaBlocco, propagaPromessa}
+module.exports = { hash, calcolaMerkleRoot, merkleRoot, validaBlocco, validaChain, validaChainParziale, leggiChain, salvaChain, PREFISSO, DIFFICOLTA, sincronizzazione, propagaBlocco}

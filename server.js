@@ -1,6 +1,6 @@
 const express = require('express')
 const app = express()
-const { hash, calcolaMerkleRoot, validaBlocco, validaChain, validaChainParziale, leggiChain, salvaChain, PREFISSO, DIFFICOLTA, sincronizzazione, propagaBlocco, propagaPromessa } = require('./functions')
+const { hash, calcolaMerkleRoot, validaBlocco, validaChain, validaChainParziale, leggiChain, salvaChain, PREFISSO, DIFFICOLTA, sincronizzazione, propagaBlocco} = require('./functions')
 
 let isMining = false
 let miningAttivo = false
@@ -37,10 +37,6 @@ app.post("/promessa", (req, res) => { //endpoint che riceve una promessa e la sa
         return res.status(400).json({ errore: 'promessa già nel mempool' })
     }
     mempool.push(promessa)
-    const daPeer = req.headers['x-peer'] === 'true'
-    if (!daPeer) {
-        propagaPromessa(promessa)
-    }
     salvaChain(chain)
     avviaMining()
     res.json({})
