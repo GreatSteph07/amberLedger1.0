@@ -9,7 +9,7 @@ const PEERS = [
 ]
 
 // redirect su un peer casuale mantenendo il path originale
-app.get('*', (req, res) => {
+app.get('/{*path}', (req, res) => {
     const peer = PEERS[Math.floor(Math.random() * PEERS.length)]
     res.redirect(peer + req.path)
 })
