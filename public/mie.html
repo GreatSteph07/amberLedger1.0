@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>AmberLedger - Le mie promesse</title>
+    <style>
+        body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 0 20px; }
+        nav { margin-bottom: 30px; }
+        nav a { margin-right: 15px; }
+        .promessa { margin: 4px 0; padding-left: 10px; border-left: 3px solid #999; }
+        .blocco { border: 1px solid #ccc; padding: 15px; margin-bottom: 15px; border-radius: 4px; }
+        .blocco .data { font-weight: bold; margin-bottom: 8px; color: #333; }
+        .blocco .meta { font-size: 0.75em; color: #aaa; margin-top: 10px; word-break: break-all; }
+        #statoChiave { font-size: 0.85em; padding: 8px 12px; border-radius: 4px; margin-bottom: 20px; }
+        #statoChiave.attiva { background: #e6f4ea; color: #2d6a4f; border: 1px solid #a8d5b5; }
+        #statoChiave.assente { background: #fff8e1; color: #7a5c00; border: 1px solid #ffe082; }
+        button { padding: 8px 16px; cursor: pointer; }
+        #messaggioChiave { margin-top: 10px; font-size: 0.85em; color: #666; }
+    </style>
+</head>
+<body>
+<nav>
+    <a href="/">Scrivi una promessa</a>
+    <a href="/sfoglia">Sfoglia la chain</a>
+    <a href="/mie">Le mie promesse</a>
+</nav>
+
+<h2>Le mie promesse</h2>
+
+<div id="statoChiave" class="assente">nessuna chiave caricata</div>
+
+<label style="padding: 8px 16px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px;">
+    Importa chiave
+    <input type="file" id="inputFile" accept=".json" style="display:none" onchange="importaChiave(event)">
+</label>
+<div id="messaggioChiave"></div>
+
+<div id="container" style="margin-top: 20px;"></div>
+
+<script>
+    const NODI = [
+        'https://amberledger1-0-peer1.onrender.com',
+        'https://amberledger1-0-peer2.onrender.com',
+        'https://amberledger1-0-peer3.onrender.com'
+    ]
+
+    let chiavePubblicaRaw = null
+
+    async function fetchConFallback(path) {
+        const nodiMescolati = [...NODI].sort(() => Math.random() - 0.5)
+        for (const nodo of nodiMescolati) {
+            try {
+                const risposta = await fetch(nodo + path)
+                if (risposta.ok) return risposta
+            } catch (e) {
+                console.log(`${nodo} non raggiungibile`)
+            }
+        }
+        throw new Error('nessun nodo disponibile')
+    }
+
+    async function importaChiave(event) {
+        const file = event.target.files[0]
+        if (!file) return
+        try {
+            const testo = await file.text()
+            const dati = JSON.parse(testo)
+            chiavePubblicaRaw = dati.pubblicaHex
+
+            const div = document.getElementById('statoChiave')
+            div.className = 'attiva'
+            div.textContent = `identità: ${chiavePubblicaRaw.slice(0, 20)}...`
+
+            caricaMiePromesse()
+        } catch (e) {
+            document.getElementById('messaggioChiave').textContent = 'file non valido'
+        }
+    }
+
+    function formattaData(dataStr) {
+        const d = new Date(dataStr)
+        return d.toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })
+    }
+
+    async function caricaMiePromesse() {
+        const container = document.getElementById('container')
+        container.innerHTML = 'caricamento...'
+
+        try {
+            const risposta = await fetchConFallback(`/mie-promesse/${chiavePubblicaRaw}`)
+            const dati = await risposta.json()
+
+            if (dati.promesse.length === 0) {
+                container.innerHTML = '<p style="color:#aaa; font-style:italic;">nessuna promessa trovata</p>'
+                return
+            }
+
+            container.innerHTML = ''
+            dati.promesse.forEach(p => {
+                const div = document.createElement('div')
+                div.className = 'blocco'
+                div.innerHTML = `
+                        <div class="data">${formattaData(p.data || new Date().toISOString())}</div>
+                        <div class="promessa">${p.testo}</div>
+                        <div class="meta">firma: ${p.firma.slice(0, 40)}...</div>
+                    `
+                container.appendChild(div)
+            })
+        } catch (e) {
+            container.innerHTML = '<p style="color:red;">nessun nodo disponibile</p>'
+        }
+    }
+</script>
+</body>
+</html>

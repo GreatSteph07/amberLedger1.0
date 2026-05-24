@@ -9,7 +9,8 @@
         nav a { margin-right: 15px; }
         .blocco { border: 1px solid #ccc; padding: 15px; margin-bottom: 15px; border-radius: 4px; }
         .blocco .data { font-weight: bold; margin-bottom: 8px; color: #333; }
-        .blocco .promessa { margin: 4px 0; padding-left: 10px; border-left: 3px solid #999; }
+        .promessa { margin: 4px 0; padding-left: 10px; border-left: 3px solid #999; }
+        .promessa .autore { font-size: 0.75em; color: #aaa; }
         .blocco .meta { font-size: 0.75em; color: #aaa; margin-top: 10px; word-break: break-all; }
         #statoIntegrita { padding: 10px 15px; margin-bottom: 20px; border-radius: 4px; font-size: 0.9em; display: none; }
         #statoIntegrita.integra { background: #e6f4ea; border: 1px solid #a8d5b5; color: #2d6a4f; }
@@ -20,125 +21,158 @@
     </style>
 </head>
 <body>
-    <nav>
-        <a href="/">Scrivi una promessa</a>
-        <a href="/sfoglia">Sfoglia la chain</a>
-    </nav>
+<nav>
+    <a href="/">Scrivi una promessa</a>
+    <a href="/sfoglia">Sfoglia la chain</a>
+    <a href="/mie">Le mie promesse</a>
+</nav>
 
-    <h2>La chain</h2>
+<h2>La chain</h2>
 
-    <div id="status"></div>
-    <div id="statoIntegrita"></div>
+<div id="status"></div>
+<div id="statoIntegrita"></div>
 
-    <div id="controlli">
-        <label>
-            <input type="checkbox" id="toggleAnimazione" checked>
-            mostra animazione giorni vuoti
-        </label>
-    </div>
+<div id="controlli">
+    <label>
+        <input type="checkbox" id="toggleAnimazione" checked>
+        mostra animazione giorni vuoti
+    </label>
+</div>
 
-    <div id="mempool"></div>
-    <div id="container"></div>
+<div id="mempool"></div>
+<div id="container"></div>
 
-    <script>
-        function formattaData(dataStr) {
-            const d = new Date(dataStr);
-            return d.toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' });
+<script>
+    const NODI = [
+        'https://amberledger1-0-peer1.onrender.com',
+        'https://amberledger1-0-peer2.onrender.com',
+        'https://amberledger1-0-peer3.onrender.com'
+    ]
+
+    async function fetchConFallback(path) {
+        const nodiMescolati = [...NODI].sort(() => Math.random() - 0.5)
+        for (const nodo of nodiMescolati) {
+            try {
+                const risposta = await fetch(nodo + path)
+                if (risposta.ok) return risposta
+            } catch (e) {
+                console.log(`${nodo} non raggiungibile`)
+            }
         }
+        throw new Error('nessun nodo disponibile')
+    }
 
-        function giorniTra(dataA, dataB) {
-            const a = new Date(dataA);
-            const b = new Date(dataB);
-            return Math.round((b - a) / (1000 * 60 * 60 * 24));
-        }
+    function formattaData(dataStr) {
+        const d = new Date(dataStr)
+        return d.toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })
+    }
 
-        function calcolaDelay(giorniVuoti) {
-            if (giorniVuoti <= 1) return 500;
-            if (giorniVuoti >= 100) return 3000;
-            return 500 + ((giorniVuoti - 1) / 99) * 2500;
-        }
+    function giorniTra(dataA, dataB) {
+        const a = new Date(dataA)
+        const b = new Date(dataB)
+        return Math.round((b - a) / (1000 * 60 * 60 * 24))
+    }
 
-        async function mostraGiorniVuoti(numero, container) {
-            if (!document.getElementById('toggleAnimazione').checked) return;
-            const delay = calcolaDelay(numero);
-            const div = document.createElement('div');
-            div.style.cssText = 'text-align:center; color:#bbb; padding:10px; font-style:italic;';
-            div.textContent = numero === 1
-                ? '· · · 1 giorno senza promesse · · ·'
-                : `· · · ${numero} giorni senza promesse · · ·`;
-            container.appendChild(div);
-            await new Promise(r => setTimeout(r, delay));
-            container.removeChild(div);
-        }
+    function calcolaDelay(giorniVuoti) {
+        if (giorniVuoti <= 1) return 500
+        if (giorniVuoti >= 100) return 3000
+        return 500 + ((giorniVuoti - 1) / 99) * 2500
+    }
 
-        function creaBloccoHTML(blocco) {
-            const div = document.createElement('div');
-            div.className = 'blocco';
-            div.innerHTML = `
+    async function mostraGiorniVuoti(numero, container) {
+        if (!document.getElementById('toggleAnimazione').checked) return
+        const delay = calcolaDelay(numero)
+        const div = document.createElement('div')
+        div.style.cssText = 'text-align:center; color:#bbb; padding:10px; font-style:italic;'
+        div.textContent = numero === 1
+            ? '· · · 1 giorno senza promesse · · ·'
+            : `· · · ${numero} giorni senza promesse · · ·`
+        container.appendChild(div)
+        await new Promise(r => setTimeout(r, delay))
+        container.removeChild(div)
+    }
+
+    // costruisce il div HTML di un blocco con le promesse come oggetti
+    function creaBloccoHTML(blocco) {
+        const div = document.createElement('div')
+        div.className = 'blocco'
+        div.innerHTML = `
                 <div class="data">${formattaData(blocco.data)} — blocco #${blocco.indice}</div>
-                ${blocco.promesse.map(p => `<div class="promessa">${p}</div>`).join('')}
+                ${blocco.promesse.map(p => `
+                    <div class="promessa">
+                        ${p.testo}
+                        <div class="autore">autore: ${p.autore.slice(0, 20)}...</div>
+                    </div>
+                `).join('')}
                 <div class="meta">
                     merkle root: ${blocco.merkleRoot}<br>
                     hash: ${blocco.hash}<br>
                     nonce: ${blocco.nonce}
                 </div>
-            `;
-            return div;
-        }
+            `
+        return div
+    }
 
-        async function caricaChain() {
-            const risposta = await fetch('/chain');
-            const dati = await risposta.json();
-            const container = document.getElementById('container');
+    async function caricaChain() {
+        try {
+            const risposta = await fetchConFallback('/chain')
+            const dati = await risposta.json()
+            const container = document.getElementById('container')
 
-            // mempool — promesse in attesa di essere minate
-            const divMempool = document.getElementById('mempool');
+            // mostra le promesse in attesa di essere minate
+            const divMempool = document.getElementById('mempool')
             if (dati.mempool && dati.mempool.length > 0) {
-                divMempool.className = 'blocco';
+                divMempool.className = 'blocco'
                 divMempool.innerHTML = `
-                    <div class="data">in attesa di essere minate</div>
-                    ${dati.mempool.map(p => `<div class="promessa">${p}</div>`).join('')}
-                `;
+                        <div class="data">in attesa di essere minate</div>
+                        ${dati.mempool.map(p => `<div class="promessa">${p.testo}</div>`).join('')}
+                    `
             }
 
-            // status mining
-            const statusRisposta = await fetch('/status');
-            const statusDati = await statusRisposta.json();
+            // stato del nodo
+            const statusRisposta = await fetchConFallback('/status')
+            const statusDati = await statusRisposta.json()
             document.getElementById('status').textContent =
-                `blocchi: ${statusDati.altezza} · mempool: ${statusDati.mempool} · mining: ${statusDati.mining ? 'attivo' : 'in attesa'}`;
+                `blocchi: ${statusDati.altezza} · mempool: ${statusDati.mempool} · mining: ${statusDati.mining ? 'attivo' : 'in attesa'}`
 
-            if (dati.blocchi.length === 0) return;
+            if (dati.blocchi.length === 0) return
 
-            const blocchiOrdinati = [...dati.blocchi].reverse();
-            const oggi = new Date().toISOString();
+            // scorre i blocchi dal più recente al più vecchio
+            const blocchiOrdinati = [...dati.blocchi].reverse()
+            const oggi = new Date().toISOString()
 
             for (let i = 0; i < blocchiOrdinati.length; i++) {
-                const blocco = blocchiOrdinati[i];
-                const bloccoSuccessivo = i === 0 ? { data: oggi } : blocchiOrdinati[i - 1];
-                const vuoti = giorniTra(blocco.data, bloccoSuccessivo.data) - 1;
-                if (vuoti > 0) {
-                    await mostraGiorniVuoti(vuoti, container);
-                }
-                container.appendChild(creaBloccoHTML(blocco));
+                const blocco = blocchiOrdinati[i]
+                const bloccoSuccessivo = i === 0 ? { data: oggi } : blocchiOrdinati[i - 1]
+                const vuoti = giorniTra(blocco.data, bloccoSuccessivo.data) - 1
+                if (vuoti > 0) await mostraGiorniVuoti(vuoti, container)
+                container.appendChild(creaBloccoHTML(blocco))
             }
+        } catch (e) {
+            document.getElementById('status').textContent = 'nessun nodo disponibile'
         }
+    }
 
-        async function verificaChain() {
-            const risposta = await fetch('/verifica');
-            const dati = await risposta.json();
-            const banner = document.getElementById('statoIntegrita');
-            banner.style.display = 'block';
+    async function verificaChain() {
+        try {
+            const risposta = await fetchConFallback('/verifica')
+            const dati = await risposta.json()
+            const banner = document.getElementById('statoIntegrita')
+            banner.style.display = 'block'
             if (dati.integra) {
-                banner.className = 'integra';
-                banner.textContent = '✓ chain integra — nessuna promessa è stata alterata';
+                banner.className = 'integra'
+                banner.textContent = '✓ chain integra — nessuna promessa è stata alterata'
             } else {
-                banner.className = 'manomessa';
-                banner.textContent = '⚠ chain manomessa — una o più promesse sono state alterate';
+                banner.className = 'manomessa'
+                banner.textContent = '⚠ chain manomessa — una o più promesse sono state alterate'
             }
+        } catch (e) {
+            console.log('impossibile verificare la chain')
         }
+    }
 
-        caricaChain();
-        verificaChain();
-    </script>
+    caricaChain()
+    verificaChain()
+</script>
 </body>
 </html>

@@ -7,71 +7,265 @@
         body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 0 20px; }
         input { width: 100%; padding: 8px; margin-bottom: 10px; box-sizing: border-box; }
         .promessa { margin: 4px 0; padding-left: 10px; border-left: 3px solid #999; }
-        button { padding: 8px 16px; cursor: pointer; }
+        button { padding: 8px 16px; cursor: pointer; margin-right: 8px; }
         #messaggio { margin-top: 10px; color: green; }
+        #messaggioChiave { margin-top: 10px; font-size: 0.85em; color: #666; }
         nav { margin-bottom: 30px; }
         nav a { margin-right: 15px; }
+        .sezione { margin-top: 30px; border-top: 1px solid #eee; padding-top: 20px; }
+        #statoChiave { font-size: 0.85em; padding: 8px 12px; border-radius: 4px; margin-bottom: 20px; }
+        #statoChiave.attiva { background: #e6f4ea; color: #2d6a4f; border: 1px solid #a8d5b5; }
+        #statoChiave.assente { background: #fff8e1; color: #7a5c00; border: 1px solid #ffe082; }
     </style>
 </head>
 <body>
-    <nav>
-        <a href="/">Scrivi una promessa</a>
-        <a href="/sfoglia">Sfoglia la chain</a>
-    </nav>
+<nav>
+    <a href="/">Scrivi una promessa</a>
+    <a href="/sfoglia">Sfoglia la chain</a>
+    <a href="/mie">Le mie promesse</a>
+</nav>
 
-    <h2>Fai una promessa</h2>
-    <input type="text" id="inputPromessa" placeholder="inserisci la promessa">
-    <button onclick="salvaPromessa()">Cristallizza nell'ambra</button>
-    <div id="messaggio"></div>
+<div id="statoChiave" class="assente">nessuna chiave caricata — genera o importa la tua identità</div>
 
-    <div id="bloccoAperto" style="display:none; margin-top:20px; border:1px solid #ccc; padding:15px; border-radius:4px;">
-        <div style="font-weight:bold; margin-bottom:8px;">in attesa di essere minate</div>
-        <div id="listaMempool"></div>
-    </div>
+<h2>Fai una promessa</h2>
+<input type="text" id="inputPromessa" placeholder="inserisci la promessa">
+<button onclick="salvaPromessa()">Cristallizza nell'ambra</button>
+<div id="messaggio"></div>
 
-    <script>
-        function aggiungiPromessaMempool(testo) {
-            const lista = document.getElementById('listaMempool');
-            const div = document.createElement('div');
-            div.className = 'promessa';
-            div.textContent = testo;
-            lista.appendChild(div);
-            document.getElementById('bloccoAperto').style.display = 'block';
+<div id="bloccoAperto" style="display:none; margin-top:20px; border:1px solid #ccc; padding:15px; border-radius:4px;">
+    <div style="font-weight:bold; margin-bottom:8px;">in attesa di essere minate</div>
+    <div id="listaMempool"></div>
+</div>
+
+<div class="sezione">
+    <h3>La tua identità</h3>
+    <p style="font-size:0.85em; color:#666;">
+        La tua chiave è generata nel browser e non viene mai inviata al server.
+        Scaricala e conservala — senza di essa non potrai accedere alle tue promesse da un altro dispositivo.
+    </p>
+    <button onclick="generaChiave()">Genera nuova identità</button>
+    <button onclick="scaricaChiave()">Scarica chiave</button>
+    <label style="padding: 8px 16px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px;">
+        Importa chiave
+        <input type="file" id="inputFile" accept=".json" style="display:none" onchange="importaChiave(event)">
+    </label>
+    <div id="messaggioChiave"></div>
+</div>
+
+<script>
+    // lista dei tre nodi peer della rete
+    const NODI = [
+        'https://amberledger1-0-peer1.onrender.com',
+        'https://amberledger1-0-peer2.onrender.com',
+        'https://amberledger1-0-peer3.onrender.com'
+    ]
+
+    // coppia di chiavi ECDSA dell'utente — vive solo in memoria durante la sessione
+    let chiavePrivata = null
+    let chiavePubblica = null
+    let chiavePubblicaRaw = null // stringa hex usata come identificatore
+
+    // sceglie un nodo a caso con fallback automatico
+    async function fetchConFallback(path, opzioni) {
+        const nodiMescolati = [...NODI].sort(() => Math.random() - 0.5)
+        for (const nodo of nodiMescolati) {
+            try {
+                const risposta = await fetch(nodo + path, opzioni)
+                if (risposta.ok) return risposta
+            } catch (e) {
+                console.log(`${nodo} non raggiungibile, provo il prossimo`)
+            }
+        }
+        throw new Error('nessun nodo disponibile')
+    }
+
+    // converte un ArrayBuffer in stringa hex
+    function bufferToHex(buffer) {
+        return Array.from(new Uint8Array(buffer))
+            .map(b => b.toString(16).padStart(2, '0'))
+            .join('')
+    }
+
+    // converte una stringa hex in ArrayBuffer
+    function hexToBuffer(hex) {
+        const bytes = new Uint8Array(hex.length / 2)
+        for (let i = 0; i < hex.length; i += 2) {
+            bytes[i / 2] = parseInt(hex.slice(i, i + 2), 16)
+        }
+        return bytes.buffer
+    }
+
+    // genera una nuova coppia di chiavi ECDSA P-256
+    async function generaChiave() {
+        const coppia = await crypto.subtle.generateKey(
+            { name: 'ECDSA', namedCurve: 'P-256' },
+            true, // esportabile
+            ['sign', 'verify']
+        )
+        chiavePrivata = coppia.privateKey
+        chiavePubblica = coppia.publicKey
+
+        // esporta la chiave pubblica come hex per usarla come identificatore
+        const rawPub = await crypto.subtle.exportKey('raw', chiavePubblica)
+        chiavePubblicaRaw = bufferToHex(rawPub)
+
+        aggiornaStatoChiave()
+        mostraMessaggioChiave('nuova identità generata — scaricala subito per non perderla', 'green')
+    }
+
+    // scarica la chiave privata come file JSON
+    async function scaricaChiave() {
+        if (!chiavePrivata) {
+            mostraMessaggioChiave('genera prima una identità', 'red')
+            return
         }
 
-        async function salvaPromessa() {
-            const input = document.getElementById('inputPromessa');
-            const testo = input.value.trim();
-            if (!testo) return;
-            if (!confirm('sei sicuro? una promessa fatta non potrà essere rimossa o modificata')) return;
+        // esporta chiave privata in formato JWK (JSON Web Key)
+        const jwkPrivata = await crypto.subtle.exportKey('jwk', chiavePrivata)
+        const jwkPubblica = await crypto.subtle.exportKey('jwk', chiavePubblica)
 
-            const risposta = await fetch('/promessa', {
+        const fileContenuto = JSON.stringify({
+            privata: jwkPrivata,
+            pubblica: jwkPubblica,
+            pubblicaHex: chiavePubblicaRaw
+        }, null, 2)
+
+        // crea e clicca un link di download
+        const blob = new Blob([fileContenuto], { type: 'application/json' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = 'amberledger-chiave.json'
+        a.click()
+        URL.revokeObjectURL(url)
+    }
+
+    // importa una chiave da file JSON
+    async function importaChiave(event) {
+        const file = event.target.files[0]
+        if (!file) return
+
+        try {
+            const testo = await file.text()
+            const dati = JSON.parse(testo)
+
+            // reimporta le chiavi dal formato JWK
+            chiavePrivata = await crypto.subtle.importKey(
+                'jwk', dati.privata,
+                { name: 'ECDSA', namedCurve: 'P-256' },
+                true, ['sign']
+            )
+            chiavePubblica = await crypto.subtle.importKey(
+                'jwk', dati.pubblica,
+                { name: 'ECDSA', namedCurve: 'P-256' },
+                true, ['verify']
+            )
+            chiavePubblicaRaw = dati.pubblicaHex
+
+            aggiornaStatoChiave()
+            mostraMessaggioChiave('identità importata con successo', 'green')
+        } catch (e) {
+            mostraMessaggioChiave('file non valido', 'red')
+        }
+    }
+
+    // aggiorna il banner dello stato della chiave
+    function aggiornaStatoChiave() {
+        const div = document.getElementById('statoChiave')
+        if (chiavePubblicaRaw) {
+            div.className = 'attiva'
+            div.textContent = `identità attiva: ${chiavePubblicaRaw.slice(0, 20)}...`
+        } else {
+            div.className = 'assente'
+            div.textContent = 'nessuna chiave caricata — genera o importa la tua identità'
+        }
+    }
+
+    function mostraMessaggioChiave(testo, colore) {
+        const div = document.getElementById('messaggioChiave')
+        div.style.color = colore
+        div.textContent = testo
+        setTimeout(() => div.textContent = '', 4000)
+    }
+
+    // firma il testo della promessa con la chiave privata
+    async function firmaPromessa(testo) {
+        const encoder = new TextEncoder()
+        const dati = encoder.encode(testo)
+        const firmaBuffer = await crypto.subtle.sign(
+            { name: 'ECDSA', hash: 'SHA-256' },
+            chiavePrivata,
+            dati
+        )
+        return bufferToHex(firmaBuffer)
+    }
+
+    function aggiungiPromessaMempool(testo) {
+        const lista = document.getElementById('listaMempool')
+        const div = document.createElement('div')
+        div.className = 'promessa'
+        div.textContent = testo
+        lista.appendChild(div)
+        document.getElementById('bloccoAperto').style.display = 'block'
+    }
+
+    // salva una promessa firmata su un nodo scelto a caso
+    async function salvaPromessa() {
+        if (!chiavePrivata) {
+            document.getElementById('messaggio').style.color = 'red'
+            document.getElementById('messaggio').textContent = 'genera o importa la tua identità prima di fare una promessa'
+            return
+        }
+
+        const input = document.getElementById('inputPromessa')
+        const testo = input.value.trim()
+        if (!testo) return
+        if (!confirm('sei sicuro? una promessa fatta non potrà essere rimossa o modificata')) return
+
+        try {
+            const firma = await firmaPromessa(testo)
+
+            const risposta = await fetchConFallback('/promessa', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ testo })
-            });
-            const dati = await risposta.json();
+                body: JSON.stringify({
+                    testo,
+                    autore: chiavePubblicaRaw,
+                    firma
+                })
+            })
+            const dati = await risposta.json()
 
             if (!dati.errore) {
-                aggiungiPromessaMempool(testo);
-                input.value = '';
-                document.getElementById('messaggio').textContent = 'promessa cristallizzata ✓';
-                setTimeout(() => document.getElementById('messaggio').textContent = '', 3000);
+                aggiungiPromessaMempool(testo)
+                input.value = ''
+                document.getElementById('messaggio').style.color = 'green'
+                document.getElementById('messaggio').textContent = 'promessa cristallizzata ✓'
+                setTimeout(() => document.getElementById('messaggio').textContent = '', 3000)
             } else {
-                document.getElementById('messaggio').style.color = 'red';
-                document.getElementById('messaggio').textContent = dati.errore;
+                document.getElementById('messaggio').style.color = 'red'
+                document.getElementById('messaggio').textContent = dati.errore
             }
+        } catch (e) {
+            document.getElementById('messaggio').style.color = 'red'
+            document.getElementById('messaggio').textContent = 'nessun nodo disponibile'
         }
+    }
 
-        async function caricaMempool() {
-            const risposta = await fetch('/chain');
-            const dati = await risposta.json();
+    // carica il mempool dal nodo più veloce a rispondere
+    async function caricaMempool() {
+        try {
+            const risposta = await fetchConFallback('/chain')
+            const dati = await risposta.json()
             if (dati.mempool && dati.mempool.length > 0) {
-                dati.mempool.forEach(p => aggiungiPromessaMempool(p));
+                dati.mempool.forEach(p => aggiungiPromessaMempool(p.testo))
             }
+        } catch (e) {
+            console.log('impossibile caricare il mempool')
         }
+    }
 
-        caricaMempool();
-    </script>
+    caricaMempool()
+</script>
 </body>
 </html>
